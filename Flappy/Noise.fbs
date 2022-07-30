@@ -1,0 +1,42 @@
+﻿namespace Noise;
+
+union Operation {
+  Perlin,
+  Scale,
+  Sample,
+  Const
+}
+
+struct Perlin {
+  seed:int;
+}
+
+struct Const {
+  val:float;
+}
+
+table Scale {
+  src:Operation;
+}
+
+struct IVec2 {
+  x:int;
+  y:int;
+}
+
+struct ImgRef {
+  handle:uint;
+  dims:IVec2;
+}
+
+table Sample {
+  src:ImgRef;
+}
+
+table Pattern {
+  prog:[Operation];
+  free:[uint];
+  do_not_free_self:bool;
+}
+
+root_type Pattern;

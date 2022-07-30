@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Flappy": {
+      "commandName": "Project",
+      "nativeDebugging": true
+    }
+  }
+}
