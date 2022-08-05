@@ -8,9 +8,8 @@ public class PollTest
   public void Test()
   {
     EmptyPatternBuilder empty;
-    using var jobTask = Api.Execute(ref empty);
-
-    Api.PollCompleted();
+    using var jobTask = ExecContext.Execute(ref empty);
+    ExecContext.PollCompleted();
 
     jobTask.Result.GetAwaiter().GetResult();
   }

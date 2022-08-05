@@ -2,22 +2,22 @@
 
 EmptyPatternBuilder empty;
 
-using (Api.Execute(ref empty))
-using (Api.Execute(ref empty))
-using (Api.Execute(ref empty))
-using (Api.Execute(ref empty))
-using (Api.Execute(ref empty))
-using (var jobTask = Api.Execute(ref empty))
+using (ExecContext.Execute(ref empty))
+using (ExecContext.Execute(ref empty))
+using (ExecContext.Execute(ref empty))
+using (ExecContext.Execute(ref empty))
+using (ExecContext.Execute(ref empty))
+using (var jobTask = ExecContext.Execute(ref empty))
 {
-  Api.PollCompleted();
+  ExecContext.PollCompleted();
 
-  using (Api.Execute(ref empty))
-  using (Api.Execute(ref empty))
-  using (Api.Execute(ref empty))
-  using (Api.Execute(ref empty))
-  using (Api.Execute(ref empty))
+  using (ExecContext.Execute(ref empty))
+  using (ExecContext.Execute(ref empty))
+  using (ExecContext.Execute(ref empty))
+  using (ExecContext.Execute(ref empty))
+  using (ExecContext.Execute(ref empty))
   {
-    Api.PollCompleted();
+    ExecContext.PollCompleted();
   }
 
   var job = await jobTask.Result;

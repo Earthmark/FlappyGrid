@@ -24,8 +24,13 @@ struct IVec2 {
   y:int;
 }
 
+struct Span {
+  ptr: ulong;
+  size: int;
+}
+
 struct ImgRef {
-  handle:uint;
+  handle:Span;
   dims:IVec2;
 }
 
@@ -35,8 +40,6 @@ table Sample {
 
 table Pattern {
   prog:[Operation];
-  free:[uint];
-  do_not_free_self:bool;
 }
 
 root_type Pattern;

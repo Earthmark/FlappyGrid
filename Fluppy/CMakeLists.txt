@@ -31,8 +31,8 @@ add_custom_command(
 add_library(Fluppy SHARED
   "api.cpp" "api.h"
   ${NOISE_HEADERS}
-  "handle_storage.cpp" "handle_storage.h"
-  "operators.h" "operators.cpp")
+   "handle_storage.h"
+  "operators.h" "operators.cpp" "job_processor.h" "job_processor.cpp")
 
 set_property(TARGET Fluppy PROPERTY CXX_STANDARD 20)
 

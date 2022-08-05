@@ -8,11 +8,16 @@ class handle_storage
 public:
   using handle_type = uint32_t;
 
-  std::pair<handle_type, T*> allocate()
+  handle_storage()
+  {
+    buffer_.reserve(1024);
+  }
+
+  handle_type allocate(T&& data)
   {
     uint32_t handle = next_free_++;
-    T* target = &buffer_[handle];
-    return std::make_pair(handle, target);
+    buffer_.emplace(handle, std::move(data));
+    return handle;
   }
 
   void free(handle_type handle)
@@ -30,6 +35,6 @@ public:
   }
 
 private:
-  uint32_t next_free_ = 0;
+  std::atomic<handle_type> next_free_{ 0 };
   absl::flat_hash_map<handle_type, T> buffer_;
 };
