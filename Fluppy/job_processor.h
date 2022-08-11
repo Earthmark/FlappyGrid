@@ -25,6 +25,9 @@ public:
   absl::Span<const execution_result> consume_results();
 
 private:
+  int execute_internal(const absl::Span<uint8_t> span);
+
+  int last_id_ = 0;
   std::vector<execution_result> job_storage_;
   // The vector jobs are currently being parsed from.
   std::vector<execution_result> reading_job_storage_;

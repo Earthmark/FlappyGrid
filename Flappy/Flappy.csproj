@@ -34,7 +34,7 @@
   </ItemGroup>
 
   <Target Name="GenerateFlatbuffers" BeforeTargets="CoreCompile" Inputs="Noise.fbs" Outputs="Noise.cs">
-    <Exec Command="flatc --csharp --gen-onefile --gen-all -o obj Noise.fbs" Outputs="obj/Noise.cs">
+    <Exec Command="$(MSBuildProjectDirectory)/flatc --csharp --gen-onefile --gen-all -o obj Noise.fbs" Outputs="obj/Noise.cs">
       <Output ItemName="FlatbufferOutputs" TaskParameter="Outputs" />
     </Exec>
     <ItemGroup>

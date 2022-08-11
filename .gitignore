@@ -478,3 +478,6 @@ $RECYCLE.BIN/
 
 # Native compilations
 out/
+
+flatc.exe
+Fluppy.dll

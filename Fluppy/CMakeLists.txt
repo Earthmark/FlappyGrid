@@ -32,7 +32,8 @@ add_library(Fluppy SHARED
   "api.cpp" "api.h"
   ${NOISE_HEADERS}
    "handle_storage.h"
-  "operators.h" "operators.cpp" "job_processor.h" "job_processor.cpp")
+  "operators.h" "operators.cpp"
+  "job_processor.h" "job_processor.cpp")
 
 set_property(TARGET Fluppy PROPERTY CXX_STANDARD 20)
 
@@ -43,4 +44,9 @@ target_link_libraries(Fluppy absl::base absl::flat_hash_map flatbuffers)
 add_custom_command(TARGET Fluppy
   COMMAND ${CMAKE_COMMAND} -E copy
   $<TARGET_FILE:Fluppy>
+  ${CMAKE_CURRENT_SOURCE_DIR}/../Flappy/)
+
+add_custom_command(TARGET Fluppy
+  COMMAND ${CMAKE_COMMAND} -E copy
+  $<TARGET_FILE:flatc>
   ${CMAKE_CURRENT_SOURCE_DIR}/../Flappy/)

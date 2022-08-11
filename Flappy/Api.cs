@@ -1,36 +1,42 @@
 ﻿using FlatBuffers;
 using Noise;
 using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks.Sources;
-
-using RefHandle = System.Int32;
-using ExecHandle = System.Int32;
 
 namespace Flappy;
 
 public interface IResBuilder<out TResource>
 {
-  TResource Write(ExecContext ctx);
+  TResource CreatePattern(ExecContext ctx);
+  void DestroyPattern(ExecContext ctx);
 }
 
 public struct EmptyPatternBuilder : IResBuilder<Offset<Pattern>>
 {
-  public Offset<Pattern> Write(ExecContext ctx)
+  public Offset<Pattern> CreatePattern(ExecContext ctx)
   {
     Pattern.StartPattern(ctx.Builder);
     return Pattern.EndPattern(ctx.Builder);
+  }
+
+  public void DestroyPattern(ExecContext ctx)
+  {
+
   }
 }
 
 public class ExecContext : IValueTaskSource<ExecContext.ExecResult>, IDisposable
 {
-  private readonly List<GCHandle> _resourceHandles = new(16);
   private ManualResetValueTaskSourceCore<ExecResult> _resultSource;
 
   private readonly FlatBufferBuilder _builder = new(1024);
 
-  private ExecHandle? _executing;
+  private int? _executing;
+
+  private GCHandle _handle;
+  private InteropByteSpan _nativeSpan;
 
   public FlatBufferBuilder Builder =>
     !_executing.HasValue ? _builder : throw new InvalidOperationException("Context is currently executing");
@@ -39,63 +45,26 @@ public class ExecContext : IValueTaskSource<ExecContext.ExecResult>, IDisposable
     ? new ValueTask<ExecResult>(this, _resultSource.Version)
     : throw new InvalidOperationException("Context is currently being populated and is not running.");
 
+  public ExecContext()
+  {
+    _nativeSpan = new InteropByteSpan(_builder.DataBuffer.ToSizedArraySegment(), out _handle);
+  }
+
+  private ref InteropByteSpan ToInteropSpan()
+  {
+    var sizedSegment = _builder.DataBuffer.ToSizedArraySegment();
+    if (!ReferenceEquals(sizedSegment.Array, _handle.Target))
+    {
+      _handle.Free();
+      _nativeSpan = new InteropByteSpan(sizedSegment, out _handle);
+    }
+
+    return ref _nativeSpan;
+  }
+
   private void SetResult(in ExecResult result)
   {
-    ClearHandles();
     _resultSource.SetResult(result);
-  }
-
-  private void SetException(Exception exception)
-  {
-    ClearHandles();
-    _resultSource.SetException(exception);
-  }
-
-  private ExecHandle? ExecuteContext<TCommandBuilder>(ref TCommandBuilder builder)
-    where TCommandBuilder : IResBuilder<Offset<Pattern>>
-  {
-    Pattern.FinishPatternBuffer(Builder, builder.Write(this));
-
-    var span = new InteropByteSpan(_builder.DataBuffer.ToSizedArraySegment(), out var handle);
-    _resourceHandles.Add(handle);
-
-    var execId = Execute(span);
-    _executing = execId;
-
-    if (execId == -1)
-    {
-      SetException(new InvalidOperationException("Buffer failed to load allocated resource"));
-      return null;
-    }
-
-    if (execId == -2)
-    {
-      SetException(new InvalidOperationException("Buffer failed to validate"));
-      return null;
-    }
-
-    return execId;
-  }
-
-  private void ClearHandles()
-  {
-    foreach (var handle in _resourceHandles)
-    {
-      handle.Free();
-    }
-
-    _resourceHandles.Clear();
-  }
-
-  ~ExecContext()
-  {
-    // If the context was lost, we don't know if we can release the resources or not.
-    // To prevent referencing unallocated memory don't free handles,
-    // but at least report an error.
-    if (_resourceHandles.Count > 0)
-    {
-      Console.WriteLine("Resource handle retention dropped, memory is probably being leaked.");
-    }
   }
 
   // This uses dispose as a way to return the context to the pool.
@@ -107,12 +76,10 @@ public class ExecContext : IValueTaskSource<ExecContext.ExecResult>, IDisposable
     _builder.Clear();
     _resultSource.Reset();
 
-    // This might not be needed as this should only be disposed after the value task has completed.
-    ClearHandles();
-
     if (_executing.HasValue)
     {
-      RunningJobs.TryUpdate(_executing.Value, null, this);
+      // don't care about early dispose.
+      //RunningJobs.TryUpdate(_executing.Value, null, this);
     }
 
     _executing = null;
@@ -128,19 +95,20 @@ public class ExecContext : IValueTaskSource<ExecContext.ExecResult>, IDisposable
     ValueTaskSourceOnCompletedFlags flags) =>
     _resultSource.OnCompleted(continuation, state, token, flags);
 
-  private static readonly ConcurrentDictionary<ExecHandle, ExecContext?> RunningJobs = new();
+  private static readonly ConcurrentBag<(int Handle, ExecContext Context)> RunningJobs = new();
 
   private static readonly ConcurrentBag<ExecContext> Builders = new();
 
   static ExecContext()
   {
-    for (int i = 0; i < 20; i++)
+    for (var i = 0; i < 20; i++)
     {
       Builders.Add(new ExecContext());
     }
   }
 
-  public static ExecContext Execute<TCommandBuilder>(ref TCommandBuilder builder)
+  [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder<>))]
+  public static async ValueTask<ExecResult> Execute<TCommandBuilder>(TCommandBuilder builder)
     where TCommandBuilder : IResBuilder<Offset<Pattern>>
   {
     if (!Builders.TryTake(out var ctx))
@@ -152,22 +120,40 @@ public class ExecContext : IValueTaskSource<ExecContext.ExecResult>, IDisposable
 
     if (execId != null)
     {
-      RunningJobs.TryAdd(execId.Value, ctx);
+      RunningJobs.Add((execId.Value, ctx));
     }
 
-    return ctx;
+    var result = await ctx.Result;
+
+    builder.DestroyPattern(ctx);
+
+    return result;
   }
+
+  private int? ExecuteContext<TCommandBuilder>(ref TCommandBuilder builder)
+    where TCommandBuilder : IResBuilder<Offset<Pattern>>
+  {
+    Pattern.FinishPatternBuffer(Builder, builder.CreatePattern(this));
+    return _executing = Execute(ToInteropSpan());
+  }
+
+  private static readonly Dictionary<int, ExecContext> QueuedJobs = new();
 
   private static List<ExecResult> _missedJobs = new(128);
   private static List<ExecResult> _missedJobsBackBuffer = new(128);
 
   public static void PollCompleted()
   {
+    while (RunningJobs.TryTake(out var item))
+    {
+      QueuedJobs.Add(item.Handle, item.Context);
+    }
+
     foreach (var job in _missedJobs)
     {
-      if (RunningJobs.TryRemove(job.Exec, out var tcs))
+      if (QueuedJobs.Remove(job.Exec, out var tcs))
       {
-        tcs?.SetResult(job);
+        tcs.SetResult(job);
       }
 
       _missedJobsBackBuffer.Add(job);
@@ -178,9 +164,9 @@ public class ExecContext : IValueTaskSource<ExecContext.ExecResult>, IDisposable
 
     foreach (ref var job in ExecutionResults().ToSpan())
     {
-      if (RunningJobs.TryRemove(job.Exec, out var tcs))
+      if (QueuedJobs.Remove(job.Exec, out var ctx))
       {
-        tcs?.SetResult(job);
+        ctx.SetResult(job);
       }
       else
       {
@@ -203,10 +189,10 @@ public class ExecContext : IValueTaskSource<ExecContext.ExecResult>, IDisposable
     // ReSharper disable twice PrivateFieldCanBeConvertedToLocalVariable
     private readonly IntPtr _start;
     private readonly int _length;
-  };
+  }
 
   [StructLayout(LayoutKind.Sequential)]
-  public record struct ExecResult(ExecHandle Exec, RefHandle Code, ulong StartNanos, ulong EndNanos, int StatusCode);
+  public record struct ExecResult(int Exec, int Code, ulong StartNanos, ulong EndNanos, int StatusCode);
 
   [StructLayout(LayoutKind.Sequential)]
   private readonly unsafe struct ExecResultSpan
@@ -221,7 +207,7 @@ public class ExecContext : IValueTaskSource<ExecContext.ExecResult>, IDisposable
   }
 
   [DllImport("Fluppy.dll", EntryPoint = "execute")]
-  private static extern ExecHandle Execute(InteropByteSpan commands);
+  private static extern int Execute(InteropByteSpan commands);
 
   [DllImport("Fluppy.dll", EntryPoint = "execution_results")]
   private static extern ExecResultSpan ExecutionResults();

@@ -6,43 +6,39 @@
 
 uint64_t current_nanos()
 {
+  return 0;
   static auto start_point = std::chrono::high_resolution_clock::now();
   return std::chrono::duration_cast<std::chrono::nanoseconds>(
     std::chrono::high_resolution_clock::now() - start_point).count();
 }
 
-exec_handle job_processor::execute(const absl::Span<uint8_t> span)
-{
-  //if (flatbuffers::Verifier verifier(buffer->data(), buffer->length());
-  //  !Noise::VerifyPatternBuffer(verifier))
-  //{
-  //  return -2;
-  //}
 
-  //uint64_t start_nanos = current_nanos();
+int job_processor::execute_internal(const absl::Span<uint8_t> span)
+{
+  if (flatbuffers::Verifier verifier(span.data(), span.length());
+    !Noise::VerifyPatternBuffer(verifier))
+  {
+    return -1;
+  }
 
   const Noise::Pattern* pattern = Noise::GetPattern(span.data());
 
-  //operators ops(pattern, res_storage_);
-  //int32_t status_code = ops.execute();
+  operators ops(pattern);
+  return ops.execute();
+}
 
-  //if (const flatbuffers::Vector<uint32_t>* to_free = pattern->free(); to_free)
-  //{
-  //  for (const ref_handle to_free : *to_free)
-  //  {
-  //    res_storage_.free(to_free);
-  //  }
-  //}
-  //if (!pattern->do_not_free_self())
-   
-  //uint64_t end_nanos = current_nanos();
-  int32_t exec_id = job_storage_.size();
+exec_handle job_processor::execute(const absl::Span<uint8_t> span)
+{
+  uint64_t start_nanos = current_nanos();
+  int status = execute_internal(span);
+  uint64_t end_nanos = current_nanos();
 
+  int32_t exec_id = ++last_id_;
   job_storage_.emplace_back(execution_result{
     .execution_handle = exec_id,
-    //.start_nanos = start_nanos,
-    //.end_nanos = end_nanos,
-    //.status_code = status_code,
+    .start_nanos = start_nanos,
+    .end_nanos = end_nanos,
+    .status_code = status, //status_code,
     });
 
   return exec_id;
