@@ -4,27 +4,26 @@ using BenchmarkDotNet.Attributes;
 namespace Flappy;
 
 [MemoryDiagnoser]
-public class PollTest
+public class AsyncExecContextBenchmark
 {
   [Benchmark]
   public void RunSingleJob()
   {
     EmptyPatternBuilder empty;
-    var jobTask = ExecContext.Execute(empty);
-    ExecContext.PollCompleted();
-
-    jobTask.GetAwaiter().GetResult();
+    var j1 = AsyncExecContext.ExecuteAsync(empty);
+    Fluppy.PollCompleted();
+    j1.AsTask().GetAwaiter().GetResult();
   }
 
   [AsyncMethodBuilder(typeof(PoolingAsyncValueTaskMethodBuilder))]
   private static async ValueTask RunMultipleInternal()
   {
     EmptyPatternBuilder empty;
-    var j1 = ExecContext.Execute(empty);
-    var j2 = ExecContext.Execute(empty);
-    var j3 = ExecContext.Execute(empty);
-    var j4 = ExecContext.Execute(empty);
-    var j5 = ExecContext.Execute(empty);
+    var j1 = AsyncExecContext.ExecuteAsync(empty);
+    var j2 = AsyncExecContext.ExecuteAsync(empty);
+    var j3 = AsyncExecContext.ExecuteAsync(empty);
+    var j4 = AsyncExecContext.ExecuteAsync(empty);
+    var j5 = AsyncExecContext.ExecuteAsync(empty);
 
     await j1;
     await j2;
@@ -37,13 +36,13 @@ public class PollTest
   public void RunMultipleJobs()
   {
     var job = RunMultipleInternal();
-    ExecContext.PollCompleted();
-    job.GetAwaiter().GetResult();
+    Fluppy.PollCompleted();
+    job.AsTask().GetAwaiter().GetResult();
   }
 
   [Benchmark]
   public void PollCompleted()
   {
-    ExecContext.PollCompleted();
+    Fluppy.PollCompleted();
   }
 }

@@ -297,10 +297,10 @@ namespace FlatBuffers
 
         public ArraySegment<byte> ToSizedArraySegment()
         {
-            return new ArraySegment<byte>(_buffer.Buffer, Position, Length - Position);
+            return ToArraySegment(Position, Length - Position);
         }
 
-    public MemoryStream ToMemoryStream(int pos, int len)
+        public MemoryStream ToMemoryStream(int pos, int len)
         {
             return new MemoryStream(_buffer.Buffer, pos, len);
         }
